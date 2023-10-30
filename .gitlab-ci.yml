@@ -1,0 +1,136 @@
+include:
+  - template: Security/License-Scanning.gitlab-ci.yml
+  - template: Verify/Browser-Performance.gitlab-ci.yml
+  - template: Verify/Accessibility.gitlab-ci.yml
+  - template: Code-Quality.gitlab-ci.yml
+
+image: node:18-alpine
+
+stages:
+  - dependencia
+  - test
+  - performance
+  - accessibility
+  - Qualidade
+  - Build
+  - Pages
+  - Release
+
+cache:
+  paths:
+    - node_modules/
+
+dependencia:
+  stage: dependencia
+  artifacts:
+    paths:
+      - node_modules
+    expire_in: 1 hour
+  script:
+    - apk --no-cache add git
+    - npm install
+
+license_scanning:
+  artifacts:
+    paths: [gl-license-management-report.json]
+    reports:
+      license_scanning: gl-license-management-report.json
+    expire_in: 1 week
+    expose_as: "Licenses"
+
+code_quality:
+  variables:
+    REPORT_FORMAT: html
+  artifacts:
+    paths: [gl-code-quality-report.html]
+    expire_in: 1 week
+    expose_as: "Code Quality"
+  rules:
+    - if: $CODE_QUALITY_DISABLED
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+browser_performance:
+  variables:
+    URL: https://govbr-ds.gitlab.io/dev/wbc/govbr-ds-wbc/
+  artifacts:
+    paths: ["sitespeed-results/"]
+    expire_in: 1 week
+    expose_as: "Browser Performance"
+
+CSS:
+  stage: Qualidade
+  artifacts:
+    when: always
+    paths:
+      - report-stylelint.txt
+    expire_in: 1 week
+  script:
+    - npx stylelint src/**/*.scss  --formatter verbose --output-file report-stylelint.txt
+
+Commits:
+  stage: Qualidade
+  artifacts:
+    when: always
+    paths:
+      - report-commitlint.txt
+    expire_in: 1 week
+    expose_as: "Commitlint Report"
+  before_script:
+    - apk --no-cache add git
+    - npm i -g @govbr-ds/commit-config commitlint-gitlab-ci
+  script:
+    - commitlint-gitlab-ci -x @govbr-ds/commit-config > report-commitlint.txt
+  only:
+    - main
+    - merge_requests
+
+DS:
+  stage: Build
+  artifacts:
+    paths:
+      - dist
+    expire_in: 1 week
+  script:
+    - npm run build
+  only:
+    - main
+    - next
+    - merge_requests
+    - /\d.(\d|x).(\d|x)(-alpha)?$/
+    - /alpha$/
+
+pages:
+  stage: Pages
+  artifacts:
+    paths:
+      - public
+    expire_in: 1 week
+    expose_as: "Build"
+  script:
+    - rm -rf public
+    - npm run build
+    - mv dist public
+  only:
+    - main
+
+Semantic Release:
+  stage: Release
+  when: manual
+  environment:
+    name: production
+  artifacts:
+    paths:
+      - dist
+    expire_in: 1 week
+  before_script:
+    - apk --no-cache add git zip
+  script:
+    - npx semantic-release
+  only:
+    - main
+    - next
+    - /\d.(\d|x).(\d|x)(-alpha)?$/
+    - /alpha$/
