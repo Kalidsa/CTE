@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path,include
-from distr.views import *
+
 
 urlpatterns = [
         path('', include('distr.urls')),

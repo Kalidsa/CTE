@@ -1,6 +1,7 @@
 from django.urls import path
-from distr.views import *
+from . import views
 
 urlpatterns = [
-        path('', base)
+        path('', views.base, name='base'),
+        path('login/', views.login, name= 'login')
 ]
